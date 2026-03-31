@@ -162,7 +162,7 @@ class QueryResponse(BaseModel):
         default=None,
         description="Reference list (Disabled when include_references=False, /query/data always includes references.)",
     )
-    usage: Optional[Dict[str, int]] = Field(
+    usage: Optional[Dict[str, Any]] = Field(
         default=None, description="Token usage statistics for this query"
     )
 

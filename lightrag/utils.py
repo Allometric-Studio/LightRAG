@@ -698,6 +698,7 @@ def priority_limit_async_func_call(
                                 task_id,
                                 args,
                                 kwargs,
+                                ctx,
                             ) = await asyncio.wait_for(queue.get(), timeout=1.0)
                         except asyncio.TimeoutError:
                             continue
@@ -725,13 +726,23 @@ def priority_limit_async_func_call(
                             continue
 
                         try:
-                            # Execute function with timeout protection
-                            if max_execution_timeout is not None:
-                                result = await asyncio.wait_for(
-                                    func(*args, **kwargs), timeout=max_execution_timeout
-                                )
-                            else:
-                                result = await func(*args, **kwargs)
+                            # Restore the caller's contextvars so ContextVar-based
+                            # tracking (e.g. TokenTracker) works inside the worker.
+                            import contextvars as _ctx_mod
+                            _ctx_tokens = []
+                            for _cv in ctx:
+                                _ctx_tokens.append((_cv, _cv.set(ctx[_cv])))
+                            try:
+                                # Execute function with timeout protection
+                                if max_execution_timeout is not None:
+                                    result = await asyncio.wait_for(
+                                        func(*args, **kwargs), timeout=max_execution_timeout
+                                    )
+                                else:
+                                    result = await func(*args, **kwargs)
+                            finally:
+                                for _cv, _tok in _ctx_tokens:
+                                    _cv.reset(_tok)
 
                             # Set result if future is still valid
                             if not task_state.future.done():
@@ -995,18 +1006,22 @@ def priority_limit_async_func_call(
                     current_count = counter
                     counter += 1
 
+                # Capture caller's contextvars so the worker can restore them
+                import contextvars as _ctx_mod
+                ctx = _ctx_mod.copy_context()
+
                 # Queue the task with timeout handling
                 try:
                     if _queue_timeout is not None:
                         await asyncio.wait_for(
                             queue.put(
-                                (_priority, current_count, task_id, args, kwargs)
+                                (_priority, current_count, task_id, args, kwargs, ctx)
                             ),
                             timeout=_queue_timeout,
                         )
                     else:
                         await queue.put(
-                            (_priority, current_count, task_id, args, kwargs)
+                            (_priority, current_count, task_id, args, kwargs, ctx)
                         )
                 except asyncio.TimeoutError:
                     raise QueueFullError(
