@@ -522,6 +522,7 @@ def create_app(args):
             tracker = get_current_tracker()
             if tracker is not None:
                 kwargs["token_tracker"] = tracker
+                tracker.llm_model = args.llm_model
 
             return await openai_complete_if_cache(
                 args.llm_model,
@@ -564,6 +565,7 @@ def create_app(args):
             tracker = get_current_tracker()
             if tracker is not None:
                 kwargs["token_tracker"] = tracker
+                tracker.llm_model = args.llm_model
 
             return await azure_openai_complete_if_cache(
                 args.llm_model,
@@ -607,6 +609,7 @@ def create_app(args):
             tracker = get_current_tracker()
             if tracker is not None:
                 kwargs["token_tracker"] = tracker
+                tracker.llm_model = args.llm_model
 
             return await gemini_complete_if_cache(
                 args.llm_model,
@@ -755,6 +758,8 @@ def create_app(args):
         async def optimized_embedding_function(texts, embedding_dim=None):
             from lightrag.api.token_tracker import get_current_tracker
             tracker = get_current_tracker()
+            if tracker is not None:
+                tracker.embedding_model = model
 
             try:
                 if binding == "lollms":
