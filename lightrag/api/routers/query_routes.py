@@ -162,6 +162,9 @@ class QueryResponse(BaseModel):
         default=None,
         description="Reference list (Disabled when include_references=False, /query/data always includes references.)",
     )
+    usage: Optional[Dict[str, int]] = Field(
+        default=None, description="Token usage statistics for this query"
+    )
 
 
 class QueryDataResponse(BaseModel):
@@ -401,6 +404,10 @@ def create_query_routes(rag, api_key: Optional[str] = None, top_k: int = 60):
                 - 400: Invalid input parameters (e.g., query too short)
                 - 500: Internal processing error (e.g., LLM service unavailable)
         """
+        from lightrag.api.token_tracker import TokenTracker, set_current_tracker
+
+        tracker = TokenTracker()
+        set_current_tracker(tracker)
         try:
             param = request.to_query_params(
                 False
@@ -444,14 +451,17 @@ def create_query_routes(rag, api_key: Optional[str] = None, top_k: int = 60):
                     enriched_references.append(ref_copy)
                 references = enriched_references
 
-            # Return response with or without references based on request
+            usage = tracker.get_totals()
+
             if request.include_references:
-                return QueryResponse(response=response_content, references=references)
+                return QueryResponse(response=response_content, references=references, usage=usage)
             else:
-                return QueryResponse(response=response_content, references=None)
+                return QueryResponse(response=response_content, references=None, usage=usage)
         except Exception as e:
             logger.error(f"Error processing query: {str(e)}", exc_info=True)
             raise HTTPException(status_code=500, detail=str(e))
+        finally:
+            set_current_tracker(None)
 
     @router.post(
         "/query/stream",

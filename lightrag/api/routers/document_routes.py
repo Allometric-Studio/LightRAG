@@ -33,6 +33,8 @@ from lightrag.utils import (
 from lightrag.api.utils_api import get_combined_auth_dependency
 from ..config import global_args
 
+_track_usage: dict[str, dict] = {}
+
 
 @lru_cache(maxsize=1)
 def _is_docling_available() -> bool:
@@ -1775,6 +1777,24 @@ async def pipeline_index_texts(
     await rag.apipeline_process_enqueue_documents()
 
 
+async def pipeline_index_texts_with_tracking(
+    rag: LightRAG,
+    texts: list[str],
+    file_sources: list[str] = None,
+    track_id: str = None,
+):
+    from lightrag.api.token_tracker import TokenTracker, set_current_tracker
+
+    tracker = TokenTracker()
+    set_current_tracker(tracker)
+    try:
+        await pipeline_index_texts(rag, texts, file_sources, track_id)
+    finally:
+        set_current_tracker(None)
+        if track_id:
+            _track_usage[track_id] = tracker.get_totals()
+
+
 async def run_scanning_process(
     rag: LightRAG, doc_manager: DocumentManager, track_id: str = None
 ):
@@ -2344,7 +2364,7 @@ def create_document_routes(
             track_id = generate_track_id("insert")
 
             background_tasks.add_task(
-                pipeline_index_texts,
+                pipeline_index_texts_with_tracking,
                 rag,
                 [request.text],
                 file_sources=[request.file_source],
@@ -2427,7 +2447,7 @@ def create_document_routes(
             track_id = generate_track_id("insert")
 
             background_tasks.add_task(
-                pipeline_index_texts,
+                pipeline_index_texts_with_tracking,
                 rag,
                 request.texts,
                 file_sources=request.file_sources,
@@ -3423,5 +3443,18 @@ def create_document_routes(
             logger.error(f"Error requesting pipeline cancellation: {str(e)}")
             logger.error(traceback.format_exc())
             raise HTTPException(status_code=500, detail=str(e))
+
+    @router.get(
+        "/usage/{track_id}",
+        dependencies=[Depends(combined_auth)],
+    )
+    async def get_track_usage(track_id: str):
+        usage = _track_usage.get(track_id)
+        if usage is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No usage data for track_id: {track_id}",
+            )
+        return usage
 
     return router

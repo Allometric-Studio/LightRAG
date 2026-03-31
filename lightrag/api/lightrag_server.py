@@ -518,6 +518,11 @@ def create_app(args):
             if config_cache.openai_llm_options:
                 kwargs.update(config_cache.openai_llm_options)
 
+            from lightrag.api.token_tracker import get_current_tracker
+            tracker = get_current_tracker()
+            if tracker is not None:
+                kwargs["token_tracker"] = tracker
+
             return await openai_complete_if_cache(
                 args.llm_model,
                 prompt,
@@ -554,6 +559,11 @@ def create_app(args):
             kwargs["timeout"] = llm_timeout
             if config_cache.openai_llm_options:
                 kwargs.update(config_cache.openai_llm_options)
+
+            from lightrag.api.token_tracker import get_current_tracker
+            tracker = get_current_tracker()
+            if tracker is not None:
+                kwargs["token_tracker"] = tracker
 
             return await azure_openai_complete_if_cache(
                 args.llm_model,
@@ -592,6 +602,11 @@ def create_app(args):
                 and "generation_config" not in kwargs
             ):
                 kwargs["generation_config"] = dict(config_cache.gemini_llm_options)
+
+            from lightrag.api.token_tracker import get_current_tracker
+            tracker = get_current_tracker()
+            if tracker is not None:
+                kwargs["token_tracker"] = tracker
 
             return await gemini_complete_if_cache(
                 args.llm_model,
@@ -738,6 +753,9 @@ def create_app(args):
         # Step 3: Create optimized embedding function (calls underlying function directly)
         # Note: When model is None, each binding will use its own default model
         async def optimized_embedding_function(texts, embedding_dim=None):
+            from lightrag.api.token_tracker import get_current_tracker
+            tracker = get_current_tracker()
+
             try:
                 if binding == "lollms":
                     from lightrag.llm.lollms import lollms_embed
@@ -793,6 +811,8 @@ def create_app(args):
                         "api_key": api_key,
                         "embedding_dim": embedding_dim,
                     }
+                    if tracker is not None:
+                        kwargs["token_tracker"] = tracker
                     if model:
                         kwargs["model"] = model
                     return await actual_func(**kwargs)
@@ -854,6 +874,8 @@ def create_app(args):
                             "task_type", "RETRIEVAL_DOCUMENT"
                         ),
                     }
+                    if tracker is not None:
+                        kwargs["token_tracker"] = tracker
                     if model:
                         kwargs["model"] = model
                     return await actual_func(**kwargs)
@@ -872,6 +894,8 @@ def create_app(args):
                         "api_key": api_key,
                         "embedding_dim": embedding_dim,
                     }
+                    if tracker is not None:
+                        kwargs["token_tracker"] = tracker
                     if model:
                         kwargs["model"] = model
                     return await actual_func(**kwargs)
